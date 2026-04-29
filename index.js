@@ -16,12 +16,12 @@ import nodemailer from 'nodemailer';
 // Real-time Fleet Storage
 let drivers = {};
 
-// Professional Email Transporter (Use your Gmail or a service like SendGrid here)
+// Professional Email Transporter
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'smartjeepsystem@gmail.com', // Placeholder - you can update this
-        pass: 'your-app-password' // Placeholder
+        user: 'smartjeep302@gmail.com',
+        pass: 'hdtd mcqp cuym lxsd'
     }
 });
 
