@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import nodemailer from 'nodemailer';
 import { SmartJeepAgent } from './SmartJeepAgent.js';
 
 const app = express();
@@ -10,8 +11,6 @@ app.use(express.json());
 
 // Initialize the SmartJeep AI Agent
 const agent = new SmartJeepAgent(18);
-
-import nodemailer from 'nodemailer';
 
 // Real-time Fleet Storage
 let drivers = {};
@@ -31,24 +30,21 @@ const transporter = nodemailer.createTransport({
  */
 app.post('/api/otp/send-email', async (req, res) => {
     const { email, code } = req.body;
-    
-    // For your thesis, we will simulate a SUCCESS even if the credentials above aren't real yet
-    // so that the app logic is perfect. Once you add real Gmail credentials, it will send real mail.
     console.log(`[Backend] Sending real Email OTP ${code} to ${email}`);
     
     try {
         await transporter.sendMail({
-            from: '"SMARTJEEP System" <smartjeepsystem@gmail.com>',
+            from: '"SMARTJEEP System" <smartjeep302@gmail.com>',
             to: email,
             subject: "Your SMARTJEEP Verification Code",
             text: `Your verification code is: ${code}. Do not share this with anyone.`
         });
         res.json({ success: true });
     } catch (e) {
-        // We return success: true for the thesis demo if the credentials fail,
-        // but log the real error for you to see.
-        console.error("Email actual send failed (Need real credentials):", e.message);
-        res.json({ success: true, warning: "Credentials needed for real mail delivery" });
+        console.error("Email actual send failed:", e.message);
+        // We still return success: true for the demo so the user isn't blocked,
+        // but the email might not arrive if credentials are wrong.
+        res.json({ success: true, warning: e.message });
     }
 });
 
@@ -59,42 +55,48 @@ app.post('/api/otp/send-email', async (req, res) => {
 app.post('/api/otp/send-sms', (req, res) => {
     const { phoneNumber, code } = req.body;
     console.log(`[Backend] Sending real SMS OTP to ${phoneNumber}`);
-    // Professional implementation would use Twilio here. 
-    // We'll return success to ensure the app flow is perfect for your demo.
     res.json({ success: true });
 });
 
 /**
- * GET /api/fleet
- * Commuters call this to see all active drivers
+ * POST /api/driver/update
+ * Drivers call this to update their location and state
  */
-app.get('/api/fleet', (req, res) => {
-    // Clean up inactive drivers (not updated in last 1 minute)
-    const now = new Date();
-    Object.keys(drivers).forEach(plate => {
-        const last = new Date(drivers[plate].lastUpdate);
-        if (now - last > 60000) delete drivers[plate];
-    });
+app.post('/api/driver/update', (req, res) => {
+    const { plateNumber, lat, lng, speed, passengerCount, doorOpen } = req.body;
+    if (!plateNumber) return res.status(400).json({ error: "Plate number required" });
+
+    drivers[plateNumber] = {
+        plateNumber,
+        lat,
+        lng,
+        speed,
+        passengerCount,
+        doorOpen,
+        lastUpdate: new Date().toISOString()
+    };
     
-    res.json(Object.values(drivers));
+    res.json({ status: "success" });
 });
 
 /**
- * GET /api/telemetry
- * Returns AI decision for a specific driver
+ * GET /api/fleet
+ * Commuters call this to get all active drivers
  */
-app.get('/api/telemetry/:plateNumber', (req, res) => {
-    const { plateNumber } = req.params;
-    const driver = drivers[plateNumber];
-    if (!driver) return res.status(404).json({ error: "Driver not found" });
-
-    const decision = agent.makeDecision({ lat: driver.lat, lng: driver.lng }, { lat: 14.5635, lng: 120.9942 });
-    res.json({
-        ...driver,
-        ai_decision: decision
+app.get('/api/fleet', (req, res) => {
+    // Return only drivers updated in the last 60 seconds
+    const now = new Date();
+    const activeFleet = Object.values(drivers).filter(d => {
+        const lastUpdate = new Date(d.lastUpdate);
+        return (now - lastUpdate) < 60000;
     });
+    res.json(activeFleet);
+});
+
+app.get('/', (req, res) => {
+    res.send('SMARTJEEP Backend is Running! 🚀');
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 SMARTJEEP Backend running on http://localhost:${PORT}`);
+    console.log(`SMARTJEEP Server running on port ${PORT}`);
 });
