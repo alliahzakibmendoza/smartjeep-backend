@@ -15,9 +15,11 @@ const agent = new SmartJeepAgent(18);
 // Real-time Fleet Storage
 let drivers = {};
 
-// Professional Email Transporter
+// Professional Email Transporter (Hardened for Gmail)
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
     auth: {
         user: 'smartjeep302@gmail.com',
         pass: 'hdtd mcqp cuym lxsd'
@@ -30,18 +32,22 @@ const transporter = nodemailer.createTransport({
  */
 app.post('/api/otp/send-email', async (req, res) => {
     const { email, code } = req.body;
-    console.log(`[Backend] Sending real Email OTP ${code} to ${email}`);
+    console.log(`[Backend] Attempting to send Email OTP to ${email}...`);
     
-    // Respond to the app INSTANTLY so it doesn't time out
-    res.json({ success: true });
-
-    // Send the email in the background
-    transporter.sendMail({
-        from: '"SMARTJEEP System" <smartjeep302@gmail.com>',
-        to: email,
-        subject: "Your SMARTJEEP Verification Code",
-        text: `Your verification code is: ${code}. Do not share this with anyone.`
-    }).catch(e => console.error("Background Email failed:", e.message));
+    try {
+        await transporter.sendMail({
+            from: '"SMARTJEEP System" <smartjeep302@gmail.com>',
+            to: email,
+            subject: "Your SMARTJEEP Verification Code",
+            text: `Your verification code is: ${code}. Do not share this with anyone.`
+        });
+        console.log(`[Backend] Email sent successfully to ${email}`);
+        res.json({ success: true });
+    } catch (e) {
+        console.error("[Backend] Email Error:", e.message);
+        // If it fails, we tell the app so it can show the error for debugging
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 /**
