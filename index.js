@@ -32,20 +32,16 @@ app.post('/api/otp/send-email', async (req, res) => {
     const { email, code } = req.body;
     console.log(`[Backend] Sending real Email OTP ${code} to ${email}`);
     
-    try {
-        await transporter.sendMail({
-            from: '"SMARTJEEP System" <smartjeep302@gmail.com>',
-            to: email,
-            subject: "Your SMARTJEEP Verification Code",
-            text: `Your verification code is: ${code}. Do not share this with anyone.`
-        });
-        res.json({ success: true });
-    } catch (e) {
-        console.error("Email actual send failed:", e.message);
-        // We still return success: true for the demo so the user isn't blocked,
-        // but the email might not arrive if credentials are wrong.
-        res.json({ success: true, warning: e.message });
-    }
+    // Respond to the app INSTANTLY so it doesn't time out
+    res.json({ success: true });
+
+    // Send the email in the background
+    transporter.sendMail({
+        from: '"SMARTJEEP System" <smartjeep302@gmail.com>',
+        to: email,
+        subject: "Your SMARTJEEP Verification Code",
+        text: `Your verification code is: ${code}. Do not share this with anyone.`
+    }).catch(e => console.error("Background Email failed:", e.message));
 });
 
 /**
