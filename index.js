@@ -6,19 +6,17 @@ import { SmartJeepAgent } from './SmartJeepAgent.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Maximum Open CORS for Mobile Apps
-app.use(cors({ origin: '*', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type'] }));
+app.use(cors());
 app.use(express.json());
 
-// Initialize the SmartJeep AI Agent
 const agent = new SmartJeepAgent(18);
 
-// Debugging Variables
+// Debugging
 let lastEmailError = "No errors yet.";
 let lastRequestTime = "Never";
 let requestCount = 0;
+let lastGeneratedCode = "None"; // NEW: Track the code here!
 
-// Professional Email Transporter
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 587,
@@ -27,21 +25,19 @@ const transporter = nodemailer.createTransport({
         user: 'smartjeep302@gmail.com',
         pass: 'hdtd mcqp cuym lxsd'
     },
-    tls: {
-        rejectUnauthorized: false
-    }
+    tls: { rejectUnauthorized: false }
 });
 
 /**
  * GET /api/otp/status
- * Check this to see if the phone is actually hitting the server
  */
 app.get('/api/otp/status', (req, res) => {
     res.json({ 
         status: "Online", 
-        requestCount: requestCount,
-        lastRequestAt: lastRequestTime,
-        lastError: lastEmailError
+        hits: requestCount,
+        lastRequest: lastRequestTime,
+        lastCodeSent: lastGeneratedCode, // You can see the code here!
+        error: lastEmailError
     });
 });
 
@@ -52,35 +48,35 @@ app.post('/api/otp/send-email', async (req, res) => {
     requestCount++;
     lastRequestTime = new Date().toLocaleString();
     const { email, code } = req.body;
+    lastGeneratedCode = code;
     
-    console.log(`[Backend] Request #${requestCount} received for ${email}`);
+    console.log(`[Backend] Sending ${code} to ${email}`);
     
-    try {
-        await transporter.sendMail({
-            from: '"SMARTJEEP" <smartjeep302@gmail.com>',
-            to: email,
-            subject: "Verification Code",
-            text: `Code: ${code}`
-        });
-        res.json({ success: true });
-    } catch (e) {
-        lastEmailError = e.message;
-        console.error("Email error:", e.message);
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
+    // Respond INSTANTLY to avoid app timeout
+    res.json({ success: true, message: "Server received request" });
 
-/**
- * Other Endpoints
- */
-app.post('/api/driver/update', (req, res) => {
-    const { plateNumber, lat, lng, speed, passengerCount, doorOpen } = req.body;
-    if (!plateNumber) return res.status(400).json({ error: "Plate number required" });
-    drivers[plateNumber] = { ...req.body, lastUpdate: new Date().toISOString() };
-    res.json({ status: "success" });
+    // Send email in background
+    transporter.sendMail({
+        from: '"SMARTJEEP" <smartjeep302@gmail.com>',
+        to: email,
+        subject: "SMARTJEEP Code",
+        text: `Your code is: ${code}`
+    }).then(() => {
+        console.log("Email sent successfully");
+        lastEmailError = "None (Last Send Successful)";
+    }).catch(e => {
+        console.error("Email failed:", e.message);
+        lastEmailError = e.message;
+    });
 });
 
 let drivers = {};
+app.post('/api/driver/update', (req, res) => {
+    const { plateNumber } = req.body;
+    if (plateNumber) drivers[plateNumber] = { ...req.body, lastUpdate: new Date().toISOString() };
+    res.json({ status: "success" });
+});
+
 app.get('/api/fleet', (req, res) => {
     const now = new Date();
     const activeFleet = Object.values(drivers).filter(d => (now - new Date(d.lastUpdate)) < 60000);
@@ -88,9 +84,7 @@ app.get('/api/fleet', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    res.send(`SMARTJEEP Backend is Running! Hits: ${requestCount}`);
+    res.send(`SMARTJEEP Live. Total Hits: ${requestCount}`);
 });
 
-app.listen(PORT, () => {
-    console.log(`SMARTJEEP Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
