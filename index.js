@@ -11,11 +11,13 @@ app.use(express.json());
 
 const agent = new SmartJeepAgent(18);
 
-// Debugging
+// Debugging & State
 let lastEmailError = "No errors yet.";
 let lastRequestTime = "Never";
 let requestCount = 0;
-let lastGeneratedCode = "None"; // NEW: Track the code here!
+let lastGeneratedCode = "None";
+let gmailStatus = "Checking...";
+let drivers = {}; // FIXED: Restored this to prevent crashes
 
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
@@ -28,15 +30,27 @@ const transporter = nodemailer.createTransport({
     tls: { rejectUnauthorized: false }
 });
 
+// Verify Gmail Connection on Startup
+transporter.verify((error, success) => {
+    if (error) {
+        gmailStatus = "FAILED: " + error.message;
+        console.error("Gmail Verify Error:", error);
+    } else {
+        gmailStatus = "VERIFIED (Ready to send)";
+        console.log("Server is ready to take our messages");
+    }
+});
+
 /**
  * GET /api/otp/status
  */
 app.get('/api/otp/status', (req, res) => {
     res.json({ 
         status: "Online", 
+        gmail: gmailStatus, // Check this!
         hits: requestCount,
         lastRequest: lastRequestTime,
-        lastCodeSent: lastGeneratedCode, // You can see the code here!
+        lastCodeSent: lastGeneratedCode,
         error: lastEmailError
     });
 });
@@ -50,27 +64,22 @@ app.post('/api/otp/send-email', async (req, res) => {
     const { email, code } = req.body;
     lastGeneratedCode = code;
     
-    console.log(`[Backend] Sending ${code} to ${email}`);
+    console.log(`[Backend] Request to send ${code} to ${email}`);
     
-    // Respond INSTANTLY to avoid app timeout
-    res.json({ success: true, message: "Server received request" });
+    res.json({ success: true });
 
-    // Send email in background
     transporter.sendMail({
         from: '"SMARTJEEP" <smartjeep302@gmail.com>',
         to: email,
-        subject: "SMARTJEEP Code",
-        text: `Your code is: ${code}`
+        subject: "SMARTJEEP Verification Code",
+        text: `Your verification code is: ${code}`
     }).then(() => {
-        console.log("Email sent successfully");
-        lastEmailError = "None (Last Send Successful)";
+        lastEmailError = "None (Last Send Success)";
     }).catch(e => {
-        console.error("Email failed:", e.message);
         lastEmailError = e.message;
     });
 });
 
-let drivers = {};
 app.post('/api/driver/update', (req, res) => {
     const { plateNumber } = req.body;
     if (plateNumber) drivers[plateNumber] = { ...req.body, lastUpdate: new Date().toISOString() };
@@ -84,7 +93,7 @@ app.get('/api/fleet', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    res.send(`SMARTJEEP Live. Total Hits: ${requestCount}`);
+    res.send(`SMARTJEEP is live. Gmail: ${gmailStatus}`);
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
