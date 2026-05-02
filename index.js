@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import nodemailer from 'nodemailer';
 import { SmartJeepAgent } from './SmartJeepAgent.js';
 
 const app = express();
@@ -18,13 +17,8 @@ let requestCount = 0;
 let lastGeneratedCode = "None";
 let drivers = {};
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: 'smartjeep302@gmail.com',
-        pass: 'hdtd mcqp cuym lxsd'
-    }
-});
+// THE SECRET TUNNEL URL (Google Apps Script)
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxXA1gHB57GksbSF5f3y1TL8kexWUNWjk4IYkF0YkmP0PROGSbVLenkrhxNq2ObLO3A/exec";
 
 /**
  * GET /api/otp/status
@@ -35,30 +29,14 @@ app.get('/api/otp/status', (req, res) => {
         hits: requestCount,
         lastRequest: lastRequestTime,
         lastCodeSent: lastGeneratedCode,
-        error: lastEmailError
+        error: lastEmailError,
+        method: "Google Tunnel"
     });
 });
 
 /**
- * GET /api/otp/test-email
- * Visit this to test the email from your browser!
- */
-app.get('/api/otp/test-email', async (req, res) => {
-    try {
-        await transporter.sendMail({
-            from: '"SMARTJEEP" <smartjeep302@gmail.com>',
-            to: 'smartjeep302@gmail.com', // Sends a test to yourself
-            subject: "Backend Test Email",
-            text: "If you see this, your backend is working 100%!"
-        });
-        res.send("<h1>SUCCESS! Check your Gmail Inbox. ✅</h1>");
-    } catch (e) {
-        res.status(500).send(`<h1>FAILED: ${e.message} ❌</h1>`);
-    }
-});
-
-/**
  * POST /api/otp/send-email
+ * Uses the Google Apps Script Tunnel to send real emails!
  */
 app.post('/api/otp/send-email', async (req, res) => {
     requestCount++;
@@ -66,21 +44,29 @@ app.post('/api/otp/send-email', async (req, res) => {
     const { email, code } = req.body;
     lastGeneratedCode = code;
     
+    console.log(`[Backend] Sending ${code} to ${email} via Google Tunnel`);
+    
     // Respond instantly
     res.json({ success: true });
 
-    // Send in background
-    transporter.sendMail({
-        from: '"SMARTJEEP" <smartjeep302@gmail.com>',
-        to: email,
-        subject: "SMARTJEEP Code",
-        text: `Your code is: ${code}`
-    }).then(() => {
-        lastEmailError = "None (Last Send Successful)";
-    }).catch(e => {
-        lastEmailError = e.message;
-        console.error("Email error:", e.message);
-    });
+    // Send via Tunnel in background
+    try {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({ email, code })
+        });
+        
+        if (response.ok) {
+            lastEmailError = "None (Last Send Successful)";
+            console.log("Email sent successfully via tunnel!");
+        } else {
+            const errText = await response.text();
+            lastEmailError = "Tunnel Error: " + errText;
+        }
+    } catch (e) {
+        lastEmailError = "Network Error: " + e.message;
+        console.error("Tunnel Network Error:", e.message);
+    }
 });
 
 app.post('/api/driver/update', (req, res) => {
@@ -96,7 +82,7 @@ app.get('/api/fleet', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    res.send('SMARTJEEP Backend is Running! 🚀');
+    res.send('SMARTJEEP Backend (Tunnel Edition) is Running! 🚀');
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
