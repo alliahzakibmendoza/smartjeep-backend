@@ -15,15 +15,32 @@ const agent = new SmartJeepAgent(18);
 // Real-time Fleet Storage
 let drivers = {};
 
-// Professional Email Transporter (Hardened for Gmail)
+let lastEmailError = "No errors yet.";
+
+// Professional Email Transporter (Bulletproof for Cloud)
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false, // Use TLS
     auth: {
         user: 'smartjeep302@gmail.com',
         pass: 'hdtd mcqp cuym lxsd'
+    },
+    tls: {
+        rejectUnauthorized: false // Helps avoid local cert issues
     }
+});
+
+/**
+ * GET /api/otp/status
+ * Visit this in your browser to see the latest error
+ */
+app.get('/api/otp/status', (req, res) => {
+    res.json({ 
+        status: "Online", 
+        lastError: lastEmailError,
+        config: "Gmail/Port 587"
+    });
 });
 
 /**
@@ -32,20 +49,19 @@ const transporter = nodemailer.createTransport({
  */
 app.post('/api/otp/send-email', async (req, res) => {
     const { email, code } = req.body;
-    console.log(`[Backend] Attempting to send Email OTP to ${email}...`);
+    console.log(`[Backend] Sending real Email OTP to ${email}...`);
     
     try {
         await transporter.sendMail({
-            from: '"SMARTJEEP System" <smartjeep302@gmail.com>',
+            from: '"SMARTJEEP" <smartjeep302@gmail.com>',
             to: email,
-            subject: "Your SMARTJEEP Verification Code",
-            text: `Your verification code is: ${code}. Do not share this with anyone.`
+            subject: "Verification Code",
+            text: `Code: ${code}`
         });
-        console.log(`[Backend] Email sent successfully to ${email}`);
         res.json({ success: true });
     } catch (e) {
-        console.error("[Backend] Email Error:", e.message);
-        // If it fails, we tell the app so it can show the error for debugging
+        lastEmailError = e.message;
+        console.error("Email error:", e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
