@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import { SmartJeepAgent } from './SmartJeepAgent.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -8,65 +7,74 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-const agent = new SmartJeepAgent(18);
-
-// State
-let lastEmailError = "No attempts yet.";
-let lastRequestTime = "Never";
-let requestCount = 0;
-let lastGeneratedCode = "None";
+// "Cloud Database"
+let users = {}; 
 let drivers = {};
+let lastRequestStatus = "No requests yet.";
 
-// THE SECRET TUNNEL URL (Google Apps Script)
+// THE SECRET TUNNEL URL
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxXA1gHB57GksbSF5f3y1TL8kexWUNWjk4IYkF0YkmP0PROGSbVLenkrhxNq2ObLO3A/exec";
 
 /**
- * GET /api/otp/status
+ * LOGIN (Checks if account exists)
  */
-app.get('/api/otp/status', (req, res) => {
-    res.json({ 
-        status: "Online", 
-        hits: requestCount,
-        lastRequest: lastRequestTime,
-        lastCodeSent: lastGeneratedCode,
-        error: lastEmailError,
-        method: "Google Tunnel"
-    });
+app.post('/api/auth/login', (req, res) => {
+    const { email, password } = req.body;
+    const user = users[email];
+    
+    if (!user) {
+        return res.status(404).json({ success: false, error: "NO ACCOUNT FOUND! Please click 'Sign Up' to create an account first." });
+    }
+    
+    if (user.password !== password) {
+        return res.status(401).json({ success: false, error: "Incorrect password. Please try again." });
+    }
+    
+    res.json({ success: true, user });
 });
 
 /**
- * POST /api/otp/send-email
- * Uses the Google Apps Script Tunnel to send real emails!
+ * SIGN UP
  */
-app.post('/api/otp/send-email', async (req, res) => {
-    requestCount++;
-    lastRequestTime = new Date().toLocaleString();
-    const { email, code } = req.body;
-    lastGeneratedCode = code;
+app.post('/api/auth/signup', (req, res) => {
+    const { email, password, name, role, plateNumber } = req.body;
+    if (users[email]) return res.status(400).json({ success: false, error: "Account already exists! Please Login instead." });
     
-    console.log(`[Backend] Sending ${code} to ${email} via Google Tunnel`);
-    
-    // Respond instantly
-    res.json({ success: true });
+    users[email] = { email, password, name, role, plateNumber, createdAt: new Date() };
+    res.json({ success: true, message: "Account created on Cloud!" });
+});
 
-    // Send via Tunnel in background
+/**
+ * SEND OTP (Stronger Fetch)
+ */
+app.post('/api/otp/send', async (req, res) => {
+    const { email, code } = req.body;
+    console.log(`[OTP] Attempting to send ${code} to ${email}...`);
+    
     try {
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
+            headers: { 'Content-Type': 'text/plain' }, // Google Script prefers text/plain or no header
             body: JSON.stringify({ email, code })
         });
         
-        if (response.ok) {
-            lastEmailError = "None (Last Send Successful)";
-            console.log("Email sent successfully via tunnel!");
-        } else {
-            const errText = await response.text();
-            lastEmailError = "Tunnel Error: " + errText;
-        }
+        const result = await response.text();
+        lastRequestStatus = `Last Send to ${email}: ${result}`;
+        console.log(`[OTP] Success: ${result}`);
+        res.json({ success: true });
     } catch (e) {
-        lastEmailError = "Network Error: " + e.message;
-        console.error("Tunnel Network Error:", e.message);
+        lastRequestStatus = `Last Error: ${e.message}`;
+        console.error(`[OTP] Failed: ${e.message}`);
+        res.status(500).json({ success: false, error: e.message });
     }
+});
+
+app.get('/api/otp/status', (req, res) => {
+    res.json({ 
+        online: true, 
+        registeredUsers: Object.keys(users).length, 
+        lastAction: lastRequestStatus 
+    });
 });
 
 app.post('/api/driver/update', (req, res) => {
@@ -81,8 +89,6 @@ app.get('/api/fleet', (req, res) => {
     res.json(activeFleet);
 });
 
-app.get('/', (req, res) => {
-    res.send('SMARTJEEP Backend (Tunnel Edition) is Running! 🚀');
-});
+app.get('/', (req, res) => res.send('SMARTJEEP Cloud Server is Running! 🚀'));
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
