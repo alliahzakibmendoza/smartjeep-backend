@@ -6,50 +6,54 @@ import { SmartJeepAgent } from './SmartJeepAgent.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Maximum Open CORS for Mobile Apps
+app.use(cors({ origin: '*', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type'] }));
 app.use(express.json());
 
 // Initialize the SmartJeep AI Agent
 const agent = new SmartJeepAgent(18);
 
-// Real-time Fleet Storage
-let drivers = {};
-
+// Debugging Variables
 let lastEmailError = "No errors yet.";
+let lastRequestTime = "Never";
+let requestCount = 0;
 
-// Professional Email Transporter (Bulletproof for Cloud)
+// Professional Email Transporter
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 587,
-    secure: false, // Use TLS
+    secure: false,
     auth: {
         user: 'smartjeep302@gmail.com',
         pass: 'hdtd mcqp cuym lxsd'
     },
     tls: {
-        rejectUnauthorized: false // Helps avoid local cert issues
+        rejectUnauthorized: false
     }
 });
 
 /**
  * GET /api/otp/status
- * Visit this in your browser to see the latest error
+ * Check this to see if the phone is actually hitting the server
  */
 app.get('/api/otp/status', (req, res) => {
     res.json({ 
         status: "Online", 
-        lastError: lastEmailError,
-        config: "Gmail/Port 587"
+        requestCount: requestCount,
+        lastRequestAt: lastRequestTime,
+        lastError: lastEmailError
     });
 });
 
 /**
  * POST /api/otp/send-email
- * Sends a real email OTP from the server
  */
 app.post('/api/otp/send-email', async (req, res) => {
+    requestCount++;
+    lastRequestTime = new Date().toLocaleString();
     const { email, code } = req.body;
-    console.log(`[Backend] Sending real Email OTP to ${email}...`);
+    
+    console.log(`[Backend] Request #${requestCount} received for ${email}`);
     
     try {
         await transporter.sendMail({
@@ -67,52 +71,24 @@ app.post('/api/otp/send-email', async (req, res) => {
 });
 
 /**
- * POST /api/otp/send-sms
- * Sends a real SMS OTP from the server
- */
-app.post('/api/otp/send-sms', (req, res) => {
-    const { phoneNumber, code } = req.body;
-    console.log(`[Backend] Sending real SMS OTP to ${phoneNumber}`);
-    res.json({ success: true });
-});
-
-/**
- * POST /api/driver/update
- * Drivers call this to update their location and state
+ * Other Endpoints
  */
 app.post('/api/driver/update', (req, res) => {
     const { plateNumber, lat, lng, speed, passengerCount, doorOpen } = req.body;
     if (!plateNumber) return res.status(400).json({ error: "Plate number required" });
-
-    drivers[plateNumber] = {
-        plateNumber,
-        lat,
-        lng,
-        speed,
-        passengerCount,
-        doorOpen,
-        lastUpdate: new Date().toISOString()
-    };
-    
+    drivers[plateNumber] = { ...req.body, lastUpdate: new Date().toISOString() };
     res.json({ status: "success" });
 });
 
-/**
- * GET /api/fleet
- * Commuters call this to get all active drivers
- */
+let drivers = {};
 app.get('/api/fleet', (req, res) => {
-    // Return only drivers updated in the last 60 seconds
     const now = new Date();
-    const activeFleet = Object.values(drivers).filter(d => {
-        const lastUpdate = new Date(d.lastUpdate);
-        return (now - lastUpdate) < 60000;
-    });
+    const activeFleet = Object.values(drivers).filter(d => (now - new Date(d.lastUpdate)) < 60000);
     res.json(activeFleet);
 });
 
 app.get('/', (req, res) => {
-    res.send('SMARTJEEP Backend is Running! 🚀');
+    res.send(`SMARTJEEP Backend is Running! Hits: ${requestCount}`);
 });
 
 app.listen(PORT, () => {
